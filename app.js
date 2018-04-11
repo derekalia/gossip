@@ -7,7 +7,7 @@ var host = 'localhost';
 var http = require('http');
 var request = require('request');
 var bodyParser = require('body-parser');
-const uuidv1 = require('uuid/v1');
+const uuidv1 = require('uuid');
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -31,7 +31,6 @@ var ttl = 2;
 const pickRandomBook = () => {
   let random = Math.floor(Math.random() * 55) + 1;
   favBook = books[random];
-  // console.log(favBook);
   gossip();
 };
 
@@ -52,7 +51,7 @@ const gossip = () => {
     favBook: favBook
   };
 
-  console.log('msg', msg);
+  version = version + 1;
   //loop that sends to all peers
   for (var i = 0; i < peers.length; i++) {
     request(
@@ -62,32 +61,58 @@ const gossip = () => {
         json: msg
       },
       function(error, response, body) {
-        // if (error) console.log('error', error);
-        console.log('it made it back', body);
-        //save to peers
-        // peers.push(body);
+        // if (error) console.log('error', error)
+
       }
     );
   }
 };
 
 app.post('/gossip', (req, res) => {
-  console.log('helllo', req.body);
+  console.log(`Node${port} recieved book: ${req.body.favBook} from Node${req.body.fromPort}`);
+  console.log('test req.body: ', req.body)
+  // const currentNodeState = nodeState['3000'];
+    //check uuid // TODO: add to uuid history
+  const messagePort = req.body.fromPort;
+  const portNodeState = nodeState[messagePort];
+  if(portNodeState) {
+    if(req.body['UUID'] !== portNodeState.UUID) {
+      console.log('uuid: ', req.body['UUID'], 'nodestate uuid > ', portNodeState.UUID )
+        //check version numbers
+      if(req.body.version > portNodeState.version) {
+        console.log(' body version >', req.body.version, 'nodestate version > ', portNodeState.version )
+          //set to state
+        nodeState[messagePort] = req.body;
+      }
+    }
+  } else {
+    nodeState[messagePort] = req.body;
+    console.log(nodeState, '< nodestate')
+  }
 
-  //check uuid // add to uuid history
+  // continue to push message based on ttl
+  // const hoppedMessage = req.body
+  // if(hoppedMessage.ttl > 0) {
+  //   hoppedMessage.ttl = hoppedMessage.ttl - 1;  //convert to spread
+  //     //loop that sends to all peers
+  //   for (var i = 0; i < peers.length; i++) {
+  //     request(
+  //       {
+  //         url: 'http://localhost:' + peers[i] + '/gossip',
+  //         method: 'POST',
+  //         json: hoppedMessage
+  //       },
+  //       function(error, response, body) {
+  //         // if (error) console.log('error', error);
 
-  //check with current nodeState to make sure this is the receent one
-
-  //check if that port is in node right
-
-  //check version numbers and
-
-  //set to state
-
-  nodeState[req.body.fromPort] = req.body;
+  //       }
+  //     );
+  //   }
+  // }
 
   //check ttl - decrement
   //push to other peers
+  res.send('push recieved')
 });
 
 app.get('/nodeState', (req, res) => {
