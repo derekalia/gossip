@@ -7,64 +7,103 @@ var host = 'localhost';
 var http = require('http');
 var request = require('request');
 var bodyParser = require('body-parser');
-// var {books} = require('./books');
+const uuidv1 = require('uuid/v1');
 
-//state of local gossip
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+
+//we need to restore state (version) when a node comes back online
+
 //3000: {port:3000, uuid: 3001, va}
 let nodeState = {};
 var favBook = 'Story';
 var version = 0;
 var gossipHistory = [];
 var peers = [];
-var ttl = 4;
+var ttl = 2;
 
 //get the params from the console
-process.argv.forEach((val, index) => {
-  console.log(`${index}: ${val}`);
-});
+// process.argv.forEach((val, index) => {
+//   console.log(`${index}: ${val}`);
+// });
 
 //pick a random book and set it to favBook
 const pickRandomBook = () => {
   let random = Math.floor(Math.random() * 55) + 1;
   favBook = books[random];
-  console.log(favBook);
+  // console.log(favBook);
+  gossip();
 };
 
-//call that function every 10 sec
+//call that function every 20 sec
 setInterval(pickRandomBook, 10000);
 
 //call the gossip () which sends its peers a msg.
 
-app.get('/gossip', (req, res) => {
-  request(
-    {
-      url: 'http://localhost:' + targetPort + '/gossip',
-      method: 'POST',
-      json: { UUID: UUID, fromPort: port, version: version, TTL: ttl, favBook: favBook }
-    },
-    function(error, response, body) {
-      console.log('body232', body);
-      //save to peers
-      peers.push(body);
-    }
-  );
+//generate uuid
+const gossip = () => {
+  let uuid = uuidv1();
 
-  res.send('gossip sent');
-});
+  let msg = {
+    UUID: uuid,
+    fromPort: port,
+    version: version,
+    TTL: ttl,
+    favBook: favBook
+  };
+
+  console.log('msg', msg);
+  //loop that sends to all peers
+  for (var i = 0; i < peers.length; i++) {
+    request(
+      {
+        url: 'http://localhost:' + peers[i] + '/gossip',
+        method: 'POST',
+        json: msg
+      },
+      function(error, response, body) {
+        // if (error) console.log('error', error);
+        console.log('it made it back', body);
+        //save to peers
+        // peers.push(body);
+      }
+    );
+  }
+};
 
 app.post('/gossip', (req, res) => {
-  console.log(req.body.favBook);
+  console.log('helllo', req.body);
+
+  //check uuid // add to uuid history
+
+  //check with current nodeState to make sure this is the receent one
+
+  //check if that port is in node right
+
+  //check version numbers and
+
+  //set to state
+
+  nodeState[req.body.fromPort] = req.body;
+
+  //check ttl - decrement
+  //push to other peers
 });
 
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+app.get('/nodeState', (req, res) => {
+  res.send(nodeState);
+});
+
+app.get('/getPeers', (req, res) => {
+  res.send(peers);
+});
 
 app.get('/', (req, res) => {
   console.log(books);
   res.sendFile(__dirname + '/index.html');
 });
 
-app.get('/bootstrap', (req, res) => {
+const bootstrap = () => {
   request(
     {
       url: 'http://localhost:' + targetPort + '/peers',
@@ -72,21 +111,22 @@ app.get('/bootstrap', (req, res) => {
       json: { fromPort: port }
     },
     function(error, response, body) {
-      console.log('body232', body);
-      //save to peers
-      peers.push(body);
+      let otherPort = String(body);
+
+      if (peers.indexOf(otherPort) === -1 && otherPort !== "undefined" )  {
+        peers.push(otherPort);
+      }
     }
   );
-
-  res.send('sent bootstrap');
-});
+};
+bootstrap();
 
 app.post('/peers', (req, res) => {
-  //find the port from the req
-  console.log(req.body.fromPort);
-  //save in peers array
-  peers.push(req.body.fromPort);
-  //send this back to the callback
+  let otherPort = req.body.fromPort;
+  if (peers.indexOf(otherPort) === -1) {
+    peers.push(otherPort);
+  }
+
   res.send(port);
 });
 
