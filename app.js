@@ -91,24 +91,24 @@ app.post('/gossip', (req, res) => {
   }
 
   // continue to push message based on ttl
-  // const hoppedMessage = req.body
-  // if(hoppedMessage.ttl > 0) {
-  //   hoppedMessage.ttl = hoppedMessage.ttl - 1;  //convert to spread
-  //     //loop that sends to all peers
-  //   for (var i = 0; i < peers.length; i++) {
-  //     request(
-  //       {
-  //         url: 'http://localhost:' + peers[i] + '/gossip',
-  //         method: 'POST',
-  //         json: hoppedMessage
-  //       },
-  //       function(error, response, body) {
-  //         // if (error) console.log('error', error);
-
-  //       }
-  //     );
-  //   }
-  // }
+  const hoppedMessage = req.body
+  if(hoppedMessage.TTL > 0) {
+    console.log('hopped >>>>>', hoppedMessage.TTL);
+    hoppedMessage.TTL = hoppedMessage.TTL - 1;  //convert to spread
+      //loop that sends to all peers
+    for (var i = 0; i < peers.length; i++) {
+      request(
+        {
+          url: 'http://localhost:' + peers[i] + '/gossip',
+          method: 'POST',
+          json: hoppedMessage
+        },
+        function(error, response, body) {
+          // if (error) console.log('error', error);
+        }
+      );
+    }
+  }
 
   //check ttl - decrement
   //push to other peers
