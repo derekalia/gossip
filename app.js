@@ -10,11 +10,10 @@ var bodyParser = require('body-parser');
 const uuidv1 = require('uuid');
 
 app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.urlencoded({ extended: false }));
 
 //we need to restore state (version) when a node comes back online
 
-//3000: {port:3000, uuid: 3001, va}
 let nodeState = {};
 var favBook = 'Story';
 var version = 0;
@@ -34,15 +33,11 @@ const pickRandomBook = () => {
   gossip();
 };
 
-//call that function every 20 sec
+//call that function every 10 sec
 setInterval(pickRandomBook, 10000);
 
-//call the gossip () which sends its peers a msg.
-
-//generate uuid
 const gossip = () => {
   let uuid = uuidv1();
-
   let msg = {
     UUID: uuid,
     fromPort: port,
@@ -52,6 +47,7 @@ const gossip = () => {
   };
 
   version = version + 1;
+
   //loop that sends to all peers
   for (var i = 0; i < peers.length; i++) {
     request(
@@ -61,41 +57,45 @@ const gossip = () => {
         json: msg
       },
       function(error, response, body) {
-        // if (error) console.log('error', error)
-
+        if (error) console.log('error', error);
       }
     );
   }
 };
 
 app.post('/gossip', (req, res) => {
-  console.log(`Node${port} recieved book: ${req.body.favBook} from Node${req.body.fromPort}`);
-  console.log('test req.body: ', req.body)
+  console.log(`Node ${port} recieved book: ${req.body.favBook} from Node ${req.body.fromPort}`);
+  console.log('test req.body: ', req.body);
+
   // const currentNodeState = nodeState['3000'];
-    //check uuid // TODO: add to uuid history
+  //check uuid // TODO: add to uuid history
+
   const messagePort = req.body.fromPort;
   const portNodeState = nodeState[messagePort];
-  if(portNodeState) {
-    if(req.body['UUID'] !== portNodeState.UUID) {
-      console.log('uuid: ', req.body['UUID'], 'nodestate uuid > ', portNodeState.UUID )
+
+  if (gossipHistory.indexOf(req.body.UUID) === -1) {
+    if (portNodeState) {
+      // if (req.body['UUID'] !== portNodeState.UUID) {
+        console.log('uuid: ', req.body['UUID'], 'nodestate uuid > ', portNodeState.UUID);
         //check version numbers
-      if(req.body.version > portNodeState.version) {
-        console.log(' body version >', req.body.version, 'nodestate version > ', portNodeState.version )
+        if (req.body.version > portNodeState.version) {
+          console.log(' body version >', req.body.version, 'nodestate version > ', portNodeState.version);
           //set to state
-        nodeState[messagePort] = req.body;
-      }
+          nodeState[messagePort] = req.body;
+        }
+      // }
+    } else {
+      nodeState[messagePort] = req.body;
+      console.log(nodeState, '< nodestate');
     }
-  } else {
-    nodeState[messagePort] = req.body;
-    console.log(nodeState, '< nodestate')
   }
 
   // continue to push message based on ttl
-  const hoppedMessage = req.body
-  if(hoppedMessage.TTL > 0) {
+  const hoppedMessage = req.body;
+  if (hoppedMessage.TTL > 0) {
     console.log('hopped >>>>>', hoppedMessage.TTL);
-    hoppedMessage.TTL = hoppedMessage.TTL - 1;  //convert to spread
-      //loop that sends to all peers
+    hoppedMessage.TTL = hoppedMessage.TTL - 1; //convert to spread
+    //loop that sends to all peers
     for (var i = 0; i < peers.length; i++) {
       request(
         {
@@ -112,7 +112,7 @@ app.post('/gossip', (req, res) => {
 
   //check ttl - decrement
   //push to other peers
-  res.send('push recieved')
+  res.send('push recieved');
 });
 
 app.get('/nodeState', (req, res) => {
@@ -129,34 +129,84 @@ app.get('/', (req, res) => {
 });
 
 const bootstrap = () => {
+  console.log('runing bootstrap on ', targetPort);
+  //we should do a get req first
   request(
     {
       url: 'http://localhost:' + targetPort + '/peers',
-      method: 'POST',
-      json: { fromPort: port }
+      method: 'GET'
     },
     function(error, response, body) {
-      let otherPort = String(body);
+      if (response && response.statusCode === 200) {
+        console.log('response coming back from ', body);
 
-      if (peers.indexOf(otherPort) === -1 && otherPort !== "undefined" )  {
-        peers.push(otherPort);
+        request(
+          {
+            url: 'http://localhost:' + targetPort + '/peers',
+            method: 'POST',
+            json: { fromPort: port }
+          },
+          function(error, response, body) {
+            console.log('bootstrap back', body);
+
+            let otherPort = String(body);
+            if (peers.indexOf(otherPort) === -1 && otherPort !== 'undefined' && otherPort.length === 4) {
+              peers.push(otherPort);
+            }
+          }
+        );
       }
+      //  else {
+      //   console.log('running bootstrap again');
+      //   setTimeout(bootstrap, 5000);
+      // }
     }
   );
 };
-bootstrap();
+
+// const bootstrap = () => {
+//   console.log('runing bootstrap on ', targetPort);
+//   //we should do a get req first
+
+//   request(
+//     {
+//       url: 'http://localhost:' + targetPort + '/peers',
+//       method: 'POST',
+//       json: { fromPort: port }
+//     },
+//     function(error, response, body) {
+//       console.log('bootstrap back');
+
+//       let otherPort = String(body);
+//       if (peers.indexOf(otherPort) === -1 && otherPort !== 'undefined' && otherPort.length === 4) {
+//         peers.push(otherPort);
+//       }
+//     }
+//   );
+// };
+
+app.get('/bootstrap', (req, res) => {
+  bootstrap();
+  res.sendStatus(200);
+});
+
+app.get('/peers', (req, res) => {
+  console.log('peers get', req.headers);
+  res.sendStatus(200);
+});
 
 app.post('/peers', (req, res) => {
+  console.log('/peers post', req.body.fromPort);
   let otherPort = req.body.fromPort;
-  if (peers.indexOf(otherPort) === -1) {
-    peers.push(otherPort);
-  }
+
+  peers.push(otherPort);
 
   res.send(port);
 });
 
 app.listen(port, () => {
   console.log('Server listening on port ' + port);
+  bootstrap();
 });
 
 const books = [
